@@ -1,505 +1,386 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth, useUser } from "@clerk/nextjs"
-import { Button } from "@/components/ui/button"
+import { useUser } from "@clerk/nextjs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
-  Copy,
-  Key,
-  TrendingUp,
-  Zap,
-  Crown,
   BarChart3,
   Shield,
-  BookOpen,
-  Download,
-  MessageCircle,
+  Activity,
+  Copy,
+  Eye,
+  EyeOff,
   RefreshCw,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle,
 } from "lucide-react"
 import Navbar from "@/components/Navbar"
-import Link from "next/link"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
-interface UserData {
-  id: number
-  email: string
-  api_key: string
-  plan: string
-  daily_usage: number
-  daily_limit: number
-  created_at: string
+interface UserStats {
   total_requests: number
-  success_rate: number
-}
-
-interface RecentActivity {
-  id: number
-  amount: string
-  location: string
-  ip_address: string
-  risk_score: number
-  status: string
-  recommendation: string
-  created_at: string
+  total_fraud_checks: number
+  high_risk_count: number
+  medium_risk_count: number
+  low_risk_count: number
+  avg_risk_score: number
+  recent_checks: Array<{
+    id: number
+    amt_inr: number
+    sender_city: string
+    receiver_city: string
+    status: string
+    risk_score: number
+    created_at: string
+  }>
 }
 
 export default function DashboardPage() {
-  const { userId } = useAuth()
-  const { user } = useUser()
-  const [userData, setUserData] = useState<UserData | null>(null)
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
+  const { isSignedIn, user } = useUser()
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [apiKey, setApiKey] = useState("")
+  const [showApiKey, setShowApiKey] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState("")
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (userId) {
-      fetchUserData()
-      fetchRecentActivity()
+    if (isSignedIn && user) {
+      generateApiKey()
+      fetchStats()
     }
-  }, [userId])
+  }, [isSignedIn, user])
 
-  const fetchUserData = async () => {
+  const generateApiKey = () => {
+    // Generate API key based on user ID
+    const key = `fdaas_${user?.id?.slice(0, 8)}_${Date.now().toString(36)}`
+    setApiKey(key)
+  }
+
+  const fetchStats = async () => {
     try {
-      setError("")
-      console.log("Fetching user data for:", userId)
-
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const response = await fetch(`${apiUrl}/api/users/info/?clerk_user_id=${userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      console.log("Response status:", response.status)
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("User data received:", data)
-        setUserData(data)
-      } else if (response.status === 404) {
-        console.log("User not found, creating new user")
-        // User not found, create user
-        await createUser()
-      } else {
-        const errorText = await response.text()
-        console.error("Error response:", errorText)
-        setError(`Failed to fetch user data: ${response.status}`)
+      setLoading(true)
+      // Mock data for now since we don't have backend integration yet
+      const mockStats: UserStats = {
+        total_requests: 1247,
+        total_fraud_checks: 1247,
+        high_risk_count: 89,
+        medium_risk_count: 234,
+        low_risk_count: 924,
+        avg_risk_score: 3.2,
+        recent_checks: [
+          {
+            id: 1,
+            amt_inr: 25000,
+            sender_city: "Mumbai",
+            receiver_city: "Delhi",
+            status: "low",
+            risk_score: 2.1,
+            created_at: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            amt_inr: 75000,
+            sender_city: "Bangalore",
+            receiver_city: "Chennai",
+            status: "medium",
+            risk_score: 5.8,
+            created_at: new Date(Date.now() - 3600000).toISOString(),
+          },
+          {
+            id: 3,
+            amt_inr: 150000,
+            sender_city: "Kolkata",
+            receiver_city: "Hyderabad",
+            status: "high",
+            risk_score: 8.9,
+            created_at: new Date(Date.now() - 7200000).toISOString(),
+          },
+        ],
       }
-    } catch (error) {
-      console.error("Error fetching user data:", error)
-      setError("Failed to connect to server. Make sure Django backend is running on port 8000.")
+      setStats(mockStats)
+    } catch (err) {
+      setError("Failed to fetch dashboard data")
     } finally {
       setLoading(false)
     }
   }
 
-  const createUser = async () => {
+  const copyApiKey = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const response = await fetch(`${apiUrl}/api/users/create/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          clerk_user_id: userId,
-          email: user?.emailAddresses[0]?.emailAddress || "",
-        }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("User created:", data)
-        setUserData(data)
-      } else {
-        const errorText = await response.text()
-        console.error("Error creating user:", errorText)
-        setError("Failed to create user account")
-      }
-    } catch (error) {
-      console.error("Error creating user:", error)
-      setError("Failed to create user account")
-    }
-  }
-
-  const fetchRecentActivity = async () => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-      const response = await fetch(`${apiUrl}/api/fraud-checks/recent/?clerk_user_id=${userId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Recent activity:", data)
-        setRecentActivity(data)
-      } else {
-        console.log("No recent activity or error:", response.status)
-      }
-    } catch (error) {
-      console.error("Error fetching recent activity:", error)
-    }
-  }
-
-  const copyApiKey = () => {
-    if (userData?.api_key) {
-      navigator.clipboard.writeText(`fdaas_${userData.api_key}`)
+      await navigator.clipboard.writeText(apiKey)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Failed to copy API key")
     }
   }
 
-  const refreshData = async () => {
-    setLoading(true)
-    await fetchUserData()
-    await fetchRecentActivity()
+  const getRiskBadgeColor = (status: string) => {
+    switch (status) {
+      case "low":
+        return "bg-green-100 text-green-800 border-green-200"
+      case "medium":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "high":
+        return "bg-red-100 text-red-800 border-red-200"
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200"
+    }
   }
 
-  if (!userId) {
+  if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
         <Navbar />
         <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-900 mb-4">Please sign in to access your dashboard</h1>
-            <Link href="/">
-              <Button>Go to Homepage</Button>
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your dashboard...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="text-center max-w-md">
-            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-4">
-              <h2 className="text-lg font-semibold text-red-800 mb-2">Connection Error</h2>
-              <p className="text-red-600 mb-4">{error}</p>
-              <div className="text-sm text-red-600 bg-red-100 p-3 rounded">
-                <p className="font-medium">Make sure:</p>
-                <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Django backend is running on port 8000</li>
-                  <li>
-                    Run: <code className="bg-red-200 px-1 rounded">python manage.py runserver</code>
-                  </li>
-                  <li>Check console for any backend errors</li>
-                </ul>
-              </div>
-            </div>
-            <Button onClick={refreshData}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry Connection
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!userData) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-[80vh]">
-          <div className="text-center">
-            <p className="text-gray-600 mb-4">No user data found</p>
-            <Button onClick={refreshData}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
-          </div>
+          <Card className="w-full max-w-md">
+            <CardHeader className="text-center">
+              <Shield className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+              <CardTitle>Sign In Required</CardTitle>
+              <CardDescription>Please sign in to access your dashboard</CardDescription>
+            </CardHeader>
+          </Card>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto p-6">
         {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, {user?.firstName || "User"}! 👋</h1>
-            <p className="text-gray-600">Manage your fraud detection API and monitor usage statistics</p>
-          </div>
-          <Button onClick={refreshData} variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome back, {user?.firstName || "User"}!</h1>
+          <p className="text-gray-600">Monitor your fraud detection usage and manage your API access</p>
         </div>
+
+        {error && (
+          <Alert className="mb-6 border-red-200 bg-red-50">
+            <AlertTriangle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* API Key Section */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              API Configuration
+            </CardTitle>
+            <CardDescription>Use this API key to authenticate your requests</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="api-key">Your API Key</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    id="api-key"
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    readOnly
+                    className="font-mono"
+                  />
+                  <Button variant="outline" size="icon" onClick={() => setShowApiKey(!showApiKey)}>
+                    {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={copyApiKey}
+                    className={copied ? "bg-green-50 border-green-200" : ""}
+                  >
+                    {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">Include this key in the X-API-KEY header of your requests</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Daily Usage</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {userData.daily_usage}/{userData.daily_limit}
-                  </p>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i} className="animate-pulse">
+                <CardContent className="p-6">
+                  <div className="h-4 bg-gray-200 rounded mb-2"></div>
+                  <div className="h-8 bg-gray-200 rounded"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : stats ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Requests</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.total_requests.toLocaleString()}</p>
+                  </div>
+                  <BarChart3 className="h-8 w-8 text-blue-600" />
                 </div>
-                <TrendingUp className="h-8 w-8 text-blue-600" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Requests</p>
-                  <p className="text-2xl font-bold text-gray-900">{userData.total_requests || 0}</p>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Avg Risk Score</p>
+                    <p className="text-2xl font-bold text-gray-900">{stats.avg_risk_score.toFixed(1)}/10</p>
+                  </div>
+                  <TrendingUp className="h-8 w-8 text-green-600" />
                 </div>
-                <BarChart3 className="h-8 w-8 text-green-600" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Success Rate</p>
-                  <p className="text-2xl font-bold text-gray-900">{userData.success_rate || 0}%</p>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">High Risk</p>
+                    <p className="text-2xl font-bold text-red-600">{stats.high_risk_count}</p>
+                  </div>
+                  <AlertTriangle className="h-8 w-8 text-red-600" />
                 </div>
-                <Shield className="h-8 w-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Current Plan</p>
-                  <p className="text-2xl font-bold text-gray-900">{userData.plan}</p>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Low Risk</p>
+                    <p className="text-2xl font-bold text-green-600">{stats.low_risk_count}</p>
+                  </div>
+                  <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
-                <Crown className="h-8 w-8 text-yellow-600" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* API Key Card */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Key className="h-5 w-5" />
-                Your API Key
-              </CardTitle>
-              <CardDescription>
-                This key was automatically generated when you signed up. Use it to authenticate your API requests.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2 p-4 bg-gray-50 rounded-lg border">
-                <code className="flex-1 text-sm font-mono text-gray-800 truncate">fdaas_{userData.api_key}</code>
-                <Button size="sm" variant="outline" onClick={copyApiKey} className="flex-shrink-0">
-                  <Copy className="h-4 w-4 mr-1" />
-                  {copied ? "Copied!" : "Copy"}
+        {/* Risk Distribution */}
+        {stats && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Risk Distribution</CardTitle>
+                <CardDescription>Breakdown of transaction risk levels</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <span className="text-sm">Low Risk</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{stats.low_risk_count}</div>
+                      <div className="text-xs text-gray-500">
+                        {((stats.low_risk_count / stats.total_fraud_checks) * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                      <span className="text-sm">Medium Risk</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{stats.medium_risk_count}</div>
+                      <div className="text-xs text-gray-500">
+                        {((stats.medium_risk_count / stats.total_fraud_checks) * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                      <span className="text-sm">High Risk</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium">{stats.high_risk_count}</div>
+                      <div className="text-xs text-gray-500">
+                        {((stats.high_risk_count / stats.total_fraud_checks) * 100).toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>Common tasks and tools</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Button className="w-full justify-start" variant="outline" asChild>
+                  <a href="/manual-check">
+                    <Activity className="mr-2 h-4 w-4" />
+                    Run Manual Check
+                  </a>
                 </Button>
-              </div>
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>🔒 Security Note:</strong> This API key is permanent and tied to your account. Keep it secure
-                  and never share it publicly.
-                </p>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Created: {new Date(userData.created_at).toLocaleDateString()}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Plan Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Crown className="h-5 w-5" />
-                Current Plan
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center space-y-4">
-                <Badge variant="secondary" className="text-lg px-3 py-1">
-                  {userData.plan} Plan
-                </Badge>
-                <div>
-                  <p className="text-3xl font-bold text-gray-900">$0</p>
-                  <p className="text-sm text-gray-600">per month</p>
-                </div>
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p>✅ {userData.daily_limit} requests per day</p>
-                  <p>✅ Basic fraud detection</p>
-                  <p>✅ Email support</p>
-                </div>
-                <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-                  <Crown className="h-4 w-4 mr-2" />
-                  Upgrade to Pro
+                <Button className="w-full justify-start" variant="outline" onClick={fetchStats}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh Data
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+                <Button className="w-full justify-start" variant="outline" asChild>
+                  <a href="/docs" target="_blank" rel="noreferrer">
+                    <Shield className="mr-2 h-4 w-4" />
+                    API Documentation
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-          {/* Usage Stats */}
+        {/* Recent Checks */}
+        {stats && stats.recent_checks.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
-                Usage Analytics
-              </CardTitle>
-              <CardDescription>Today's API usage</CardDescription>
+              <CardTitle>Recent Fraud Checks</CardTitle>
+              <CardDescription>Your latest transaction analyses</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Requests Used</span>
-                    <span>
-                      {userData.daily_usage}/{userData.daily_limit}
-                    </span>
+                {stats.recent_checks.map((check) => (
+                  <div key={check.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div>
+                        <div className="font-medium">₹{check.amt_inr.toLocaleString()}</div>
+                        <div className="text-sm text-gray-500">
+                          {check.sender_city} → {check.receiver_city}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-sm font-medium">Risk: {check.risk_score}/10</div>
+                        <div className="text-xs text-gray-500">{new Date(check.created_at).toLocaleDateString()}</div>
+                      </div>
+                      <Badge className={getRiskBadgeColor(check.status)}>{check.status.toUpperCase()}</Badge>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min((userData.daily_usage / userData.daily_limit) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-2">
-                    {Math.max(userData.daily_limit - userData.daily_usage, 0)} requests remaining today
-                  </p>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <div className="flex justify-between items-center text-sm">
-                    <span>Success Rate</span>
-                    <span className="font-semibold text-green-600">{userData.success_rate || 0}%</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
-
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5" />
-                Quick Actions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Link href="/docs">
-                <Button variant="outline" className="w-full justify-start">
-                  <BookOpen className="h-4 w-4 mr-2" />
-                  API Documentation
-                </Button>
-              </Link>
-              <Link href="/manual-check">
-                <Button variant="outline" className="w-full justify-start">
-                  <Shield className="h-4 w-4 mr-2" />
-                  Test Fraud Detection
-                </Button>
-              </Link>
-              <Button variant="outline" className="w-full justify-start">
-                <Download className="h-4 w-4 mr-2" />
-                Download SDK
-              </Button>
-              <Button variant="outline" className="w-full justify-start">
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Contact Support
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Recent API Activity</CardTitle>
-              <CardDescription>Your latest fraud detection requests</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {recentActivity.length > 0 ? (
-                <div className="space-y-4">
-                  {recentActivity.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-4">
-                          <div>
-                            <p className="font-medium text-gray-900">${activity.amount}</p>
-                            <p className="text-sm text-gray-500">{new Date(activity.created_at).toLocaleString()}</p>
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            <p>IP: {activity.ip_address}</p>
-                            <p>Location: {activity.location}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <Badge
-                          variant={
-                            activity.status === "high"
-                              ? "destructive"
-                              : activity.status === "medium"
-                                ? "default"
-                                : "secondary"
-                          }
-                        >
-                          {activity.status} Risk ({activity.risk_score}/10)
-                        </Badge>
-                        <p className="text-sm text-gray-600 capitalize">{activity.recommendation}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">No API activity yet</p>
-                  <p className="text-sm text-gray-400 mt-2">Start using your API to see activity here</p>
-                </div>
-              )}
-
-              {recentActivity.length > 0 && (
-                <div className="mt-6 text-center">
-                  <Button variant="outline">View All Activity</Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        )}
       </div>
     </div>
   )

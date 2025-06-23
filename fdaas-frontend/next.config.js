@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -7,9 +10,8 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: ['placeholder.svg'],
     unoptimized: true,
   },
-};
+}
 
 module.exports = nextConfig;

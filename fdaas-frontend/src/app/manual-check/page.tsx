@@ -2,60 +2,36 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { AlertCircle, CheckCircle, Clock, MapPin, Calendar, DollarSign, User, Activity } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Loader2, Shield, AlertTriangle, CheckCircle, Clock, MapPin, CreditCard } from "lucide-react"
+import Navbar from "@/components/Navbar"
 
-interface FraudResult {
-  id: number
-  trans_date_trans_time: string
-  amount_inr: number
-  sender_city: string
-  receiver_city: string
-  category: string
-  date_of_birth: string
-  has_previous_transaction: boolean
-  previous_transaction_date?: string
-  distance_km: number
-  city_pop: number
-  age: number
-  hour: number
-  weekday: number
-  day: number
-  month: number
-  is_night: boolean
-  secs_since_last: number
-  risk_score: number
-  status: "low" | "medium" | "high"
-  recommendation: "approve" | "review" | "block"
-  confidence_score: number
-  fraud_probability: number
-  model_version: string
-  processing_time: number
-  risk_level_color: string
-  factors: string[]
-  timestamp: string
-  created_at: string
-}
+// Your exact categories and cities from the ML model
+const CATEGORIES = [
+  "personal_care",
+  "health_fitness",
+  "misc_pos",
+  "travel",
+  "kids_pets",
+  "shopping_pos",
+  "food_dining",
+  "home",
+  "entertainment",
+  "shopping_net",
+  "misc_net",
+  "grocery_pos",
+  "gas_transport",
+  "grocery_net",
+]
 
-interface FormData {
-  amount_inr: string
-  sender_city: string
-  receiver_city: string
-  category: string
-  date_of_birth: string
-  has_previous_transaction: boolean
-  previous_transaction_date: string
-}
-
-// Hardcoded cities and categories as fallback
-const FALLBACK_CITIES = [
+const CITIES = [
   "Columbia",
   "Altonah",
   "Bellmore",
@@ -907,96 +883,35 @@ const FALLBACK_CITIES = [
   "Senatobia",
 ]
 
-const FALLBACK_CATEGORIES = [
-  "personal_care",
-  "health_fitness",
-  "misc_pos",
-  "travel",
-  "kids_pets",
-  "shopping_pos",
-  "food_dining",
-  "home",
-  "entertainment",
-  "shopping_net",
-  "misc_net",
-  "grocery_pos",
-  "gas_transport",
-  "grocery_net",
-]
+interface FraudResult {
+  success: boolean
+  risk_score: number
+  status: "low" | "medium" | "high"
+  recommendation: "approve" | "review" | "block"
+  fraud_probability: number
+  confidence_score: number
+  processing_time: number
+  model_version: string
+  features: any
+  risk_factors: string[]
+  timestamp: string
+  is_manual_check: boolean
+}
 
 export default function ManualCheckPage() {
-  const [formData, setFormData] = useState<FormData>({
-    amount_inr: "",
+  const [formData, setFormData] = useState({
+    category: "",
+    amt_inr: "",
     sender_city: "",
     receiver_city: "",
-    category: "",
     date_of_birth: "",
     has_previous_transaction: false,
     previous_transaction_date: "",
   })
 
-  const [cities, setCities] = useState<string[]>(FALLBACK_CITIES)
-  const [categories, setCategories] = useState<string[]>(FALLBACK_CATEGORIES)
-  const [result, setResult] = useState<FraudResult | null>(null)
   const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<FraudResult | null>(null)
   const [error, setError] = useState("")
-  const [apiStatus, setApiStatus] = useState<"loading" | "success" | "error">("loading")
-
-  // Load cities and categories on component mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        console.log("Loading cities and categories...")
-
-        // Try multiple possible API endpoints
-        const possibleEndpoints = [
-          "http://localhost:8000/api/cities/",
-          "/api/cities/",
-          "http://127.0.0.1:8000/api/cities/",
-        ]
-
-        let citiesData = null
-        let categoriesData = null
-
-        for (const baseUrl of possibleEndpoints) {
-          try {
-            const [citiesRes, categoriesRes] = await Promise.all([
-              fetch(baseUrl.replace("/cities/", "/cities/")),
-              fetch(baseUrl.replace("/cities/", "/categories/")),
-            ])
-
-            if (citiesRes.ok && categoriesRes.ok) {
-              citiesData = await citiesRes.json()
-              categoriesData = await categoriesRes.json()
-              console.log("API data loaded successfully:", { citiesData, categoriesData })
-              break
-            }
-          } catch (err) {
-            console.log(`Failed to fetch from ${baseUrl}:`, err)
-            continue
-          }
-        }
-
-        if (citiesData && categoriesData) {
-          setCities(citiesData.cities || FALLBACK_CITIES)
-          setCategories(categoriesData.categories || FALLBACK_CATEGORIES)
-          setApiStatus("success")
-        } else {
-          console.log("Using fallback data")
-          setCities(FALLBACK_CITIES)
-          setCategories(FALLBACK_CATEGORIES)
-          setApiStatus("error")
-        }
-      } catch (err) {
-        console.error("Error loading data:", err)
-        setCities(FALLBACK_CITIES)
-        setCategories(FALLBACK_CATEGORIES)
-        setApiStatus("error")
-      }
-    }
-
-    loadData()
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1005,371 +920,333 @@ export default function ManualCheckPage() {
     setResult(null)
 
     try {
-      console.log("Submitting form data:", formData)
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-      // Try multiple possible API endpoints for fraud check
-      const possibleEndpoints = [
-        "http://localhost:8000/api/check-fraud/",
-        "/api/check-fraud/",
-        "http://127.0.0.1:8000/api/check-fraud/",
-      ]
-
-      let response = null
-
-      for (const endpoint of possibleEndpoints) {
-        try {
-          response = await fetch(endpoint, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-API-KEY": "fdaas_demo_key_123",
-            },
-            body: JSON.stringify({
-              ...formData,
-              amount_inr: Number.parseFloat(formData.amount_inr),
-              previous_transaction_date:
-                formData.has_previous_transaction && formData.previous_transaction_date
-                  ? formData.previous_transaction_date
-                  : null,
-            }),
-          })
-
-          if (response.ok) {
-            break
-          }
-        } catch (err) {
-          console.log(`Failed to submit to ${endpoint}:`, err)
-          continue
-        }
-      }
-
-      if (!response || !response.ok) {
-        const errorData = await response?.json().catch(() => ({}))
-        throw new Error(errorData.error || "Failed to check fraud - API server may be down")
-      }
+      const response = await fetch(`${API_URL}/api/fraud/predict/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          manual_check: true,
+          amt_inr: Number.parseFloat(formData.amt_inr),
+        }),
+      })
 
       const data = await response.json()
-      console.log("Fraud check result:", data)
-      setResult(data)
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`)
+      }
+
+      if (data.success) {
+        setResult(data)
+      } else {
+        setError(data.error || "Prediction failed")
+      }
     } catch (err) {
-      console.error("Error submitting form:", err)
+      console.error("Error:", err)
       setError(err instanceof Error ? err.message : "An error occurred")
     } finally {
       setLoading(false)
     }
   }
 
-  const getRiskBadgeColor = (status: string) => {
+  const getRiskColor = (status: string) => {
     switch (status) {
       case "low":
-        return "bg-green-100 text-green-800 border-green-200"
+        return "text-green-600 bg-green-50 border-green-200"
       case "medium":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+        return "text-yellow-600 bg-yellow-50 border-yellow-200"
       case "high":
-        return "bg-red-100 text-red-800 border-red-200"
+        return "text-red-600 bg-red-50 border-red-200"
       default:
-        return "bg-gray-100 text-gray-800 border-gray-200"
+        return "text-gray-600 bg-gray-50 border-gray-200"
     }
   }
 
-  const getRecommendationIcon = (recommendation: string) => {
-    switch (recommendation) {
-      case "approve":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
-      case "review":
-        return <Clock className="h-4 w-4 text-yellow-600" />
-      case "block":
-        return <AlertCircle className="h-4 w-4 text-red-600" />
+  const getRiskIcon = (status: string) => {
+    switch (status) {
+      case "low":
+        return <CheckCircle className="h-5 w-5" />
+      case "medium":
+        return <AlertTriangle className="h-5 w-5" />
+      case "high":
+        return <Shield className="h-5 w-5" />
       default:
-        return null
+        return <Clock className="h-5 w-5" />
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">XGBoost Fraud Detection</h1>
-          <p className="text-lg text-gray-600">Advanced ML-powered transaction fraud analysis</p>
-          {apiStatus === "error" && (
-            <div className="mt-2 text-sm text-orange-600">⚠️ Using offline data - API server may be down</div>
-          )}
-          {apiStatus === "success" && <div className="mt-2 text-sm text-green-600">✅ Connected to API server</div>}
-        </div>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Input Form */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Transaction Details
-              </CardTitle>
-              <CardDescription>
-                Enter transaction information for fraud analysis using our XGBoost model
-                <br />
-                <span className="text-xs text-gray-500">
-                  Cities loaded: {cities.length} | Categories loaded: {categories.length}
-                </span>
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Amount */}
-                <div className="space-y-2">
-                  <Label htmlFor="amount_inr" className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4" />
-                    Amount (INR)
-                  </Label>
-                  <Input
-                    id="amount_inr"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="Enter amount in INR"
-                    value={formData.amount_inr}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, amount_inr: e.target.value }))}
-                    required
-                  />
-                </div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Manual Fraud Check</h1>
+            <p className="text-gray-600">Enter transaction details to check for fraud risk</p>
+          </div>
 
-                {/* Cities */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      Sender City ({cities.length} cities)
-                    </Label>
-                    <Select
-                      value={formData.sender_city}
-                      onValueChange={(value) => setFormData((prev) => ({ ...prev, sender_city: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select sender city" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {cities.map((city) => (
-                          <SelectItem key={city} value={city}>
-                            {city}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Form */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  Transaction Details
+                </CardTitle>
+                <CardDescription>Fill in the transaction information for fraud analysis</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="category">Transaction Category</Label>
+                      <Select
+                        value={formData.category}
+                        onValueChange={(value) => setFormData({ ...formData, category: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CATEGORIES.map((category) => (
+                            <SelectItem key={category} value={category}>
+                              {category.replace("_", " ").toUpperCase()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4" />
-                      Receiver City ({cities.length} cities)
-                    </Label>
-                    <Select
-                      value={formData.receiver_city}
-                      onValueChange={(value) => setFormData((prev) => ({ ...prev, receiver_city: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select receiver city" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        {cities.map((city) => (
-                          <SelectItem key={city} value={city}>
-                            {city}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Category */}
-                <div className="space-y-2">
-                  <Label>Transaction Category ({categories.length} categories)</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select transaction category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category} value={category}>
-                          {category.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Date of Birth */}
-                <div className="space-y-2">
-                  <Label htmlFor="date_of_birth" className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Date of Birth
-                  </Label>
-                  <Input
-                    id="date_of_birth"
-                    type="date"
-                    value={formData.date_of_birth}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, date_of_birth: e.target.value }))}
-                    required
-                  />
-                </div>
-
-                {/* Previous Transaction */}
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="has_previous_transaction"
-                      checked={formData.has_previous_transaction}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          has_previous_transaction: e.target.checked,
-                          previous_transaction_date: e.target.checked ? prev.previous_transaction_date : "",
-                        }))
-                      }
-                      className="rounded border-gray-300"
-                    />
-                    <Label htmlFor="has_previous_transaction">Has made previous transaction with this person?</Label>
-                  </div>
-
-                  {formData.has_previous_transaction && (
-                    <div className="space-y-2">
-                      <Label htmlFor="previous_transaction_date" className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        Previous Transaction Date & Time
-                      </Label>
+                    <div>
+                      <Label htmlFor="amt_inr">Amount (INR)</Label>
                       <Input
-                        id="previous_transaction_date"
-                        type="datetime-local"
-                        value={formData.previous_transaction_date}
-                        onChange={(e) =>
-                          setFormData((prev) => ({ ...prev, previous_transaction_date: e.target.value }))
-                        }
-                        required={formData.has_previous_transaction}
+                        id="amt_inr"
+                        type="number"
+                        step="0.01"
+                        placeholder="Enter amount in INR"
+                        value={formData.amt_inr}
+                        onChange={(e) => setFormData({ ...formData, amt_inr: e.target.value })}
+                        required
                       />
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                  disabled={loading}
-                >
-                  {loading ? "Analyzing..." : "Check for Fraud"}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
-          {/* Results */}
-          <div className="space-y-6">
-            {error && (
-              <Alert className="border-red-200 bg-red-50">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-red-800">{error}</AlertDescription>
-              </Alert>
-            )}
-
-            {result && (
-              <>
-                {/* Main Result */}
-                <Card className="shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
-                      <span>Fraud Analysis Result</span>
-                      <Badge className={getRiskBadgeColor(result.status)}>{result.status.toUpperCase()} RISK</Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 bg-gray-50 rounded-lg">
-                        <div className="text-2xl font-bold text-gray-900">{result.risk_score}/10</div>
-                        <div className="text-sm text-gray-600">Risk Score</div>
-                      </div>
-                      <div className="text-center p-4 bg-gray-50 rounded-lg">
-                        <div className="text-2xl font-bold text-gray-900">{result.confidence_score}%</div>
-                        <div className="text-sm text-gray-600">Confidence</div>
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="sender_city">Sender City</Label>
+                      <Select
+                        value={formData.sender_city}
+                        onValueChange={(value) => setFormData({ ...formData, sender_city: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select sender city" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CITIES.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
-                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        {getRecommendationIcon(result.recommendation)}
-                        <span className="font-medium">Recommendation:</span>
-                      </div>
-                      <span className="font-bold text-blue-900 uppercase">{result.recommendation}</span>
+                    <div>
+                      <Label htmlFor="receiver_city">Receiver City</Label>
+                      <Select
+                        value={formData.receiver_city}
+                        onValueChange={(value) => setFormData({ ...formData, receiver_city: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select receiver city" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CITIES.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="date_of_birth">Date of Birth</Label>
+                    <Input
+                      id="date_of_birth"
+                      type="date"
+                      value={formData.date_of_birth}
+                      onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="has_previous_transaction"
+                        checked={formData.has_previous_transaction}
+                        onChange={(e) => setFormData({ ...formData, has_previous_transaction: e.target.checked })}
+                        className="rounded border-gray-300"
+                      />
+                      <Label htmlFor="has_previous_transaction">
+                        Have you made a transaction with this person before?
+                      </Label>
                     </div>
 
-                    <div className="text-sm text-gray-600">
-                      <div>Model: {result.model_version}</div>
-                      <div>Processing Time: {result.processing_time}ms</div>
-                      <div>Fraud Probability: {(result.fraud_probability * 100).toFixed(2)}%</div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    {formData.has_previous_transaction && (
+                      <div>
+                        <Label htmlFor="previous_transaction_date">Previous Transaction Date</Label>
+                        <Input
+                          id="previous_transaction_date"
+                          type="date"
+                          value={formData.previous_transaction_date}
+                          onChange={(e) => setFormData({ ...formData, previous_transaction_date: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
 
-                {/* Transaction Features */}
-                <Card className="shadow-lg">
-                  <CardHeader>
-                    <CardTitle>Transaction Features</CardTitle>
-                    <CardDescription>Calculated features used by the XGBoost model</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="font-medium">Distance:</span> {result.distance_km.toFixed(1)} km
-                      </div>
-                      <div>
-                        <span className="font-medium">City Population:</span> {result.city_pop.toLocaleString()}
-                      </div>
-                      <div>
-                        <span className="font-medium">User Age:</span> {result.age} years
-                      </div>
-                      <div>
-                        <span className="font-medium">Transaction Hour:</span> {result.hour}:00
-                      </div>
-                      <div>
-                        <span className="font-medium">Day of Week:</span>{" "}
-                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][result.weekday]}
-                      </div>
-                      <div>
-                        <span className="font-medium">Night Transaction:</span> {result.is_night ? "Yes" : "No"}
-                      </div>
-                      <div>
-                        <span className="font-medium">Time Since Last:</span>{" "}
-                        {result.secs_since_last > 0
-                          ? `${Math.round(result.secs_since_last / 3600)}h`
-                          : "First transaction"}
-                      </div>
-                      <div>
-                        <span className="font-medium">Route:</span> {result.sender_city} → {result.receiver_city}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                  <Button type="submit" className="w-full" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="mr-2 h-4 w-4" />
+                        Check for Fraud
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
 
-                {/* Risk Factors */}
-                {result.factors && result.factors.length > 0 && (
-                  <Card className="shadow-lg">
+            {/* Results */}
+            <div className="space-y-6">
+              {error && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertTriangle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800">{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {result && (
+                <>
+                  <Card>
                     <CardHeader>
-                      <CardTitle>Risk Factors Detected</CardTitle>
+                      <CardTitle className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          {getRiskIcon(result.status)}
+                          Fraud Analysis Result
+                        </span>
+                        <Badge className={getRiskColor(result.status)}>{result.status.toUpperCase()} RISK</Badge>
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap gap-2">
-                        {result.factors.map((factor, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {factor.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                          </Badge>
-                        ))}
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="text-center p-4 bg-gray-50 rounded-lg">
+                          <div className="text-2xl font-bold text-gray-900">{result.risk_score}/10</div>
+                          <div className="text-sm text-gray-600">Risk Score</div>
+                        </div>
+                        <div className="text-center p-4 bg-gray-50 rounded-lg">
+                          <div className="text-2xl font-bold text-gray-900">
+                            {(result.fraud_probability * 100).toFixed(1)}%
+                          </div>
+                          <div className="text-sm text-gray-600">Fraud Probability</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Recommendation:</span>
+                          <span className="font-medium capitalize">{result.recommendation}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Confidence:</span>
+                          <span className="font-medium">{result.confidence_score.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Processing Time:</span>
+                          <span className="font-medium">{result.processing_time.toFixed(2)}ms</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Model Version:</span>
+                          <span className="font-medium">{result.model_version}</span>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
-                )}
-              </>
-            )}
+
+                  {result.risk_factors && result.risk_factors.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5" />
+                          Risk Factors
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {result.risk_factors.map((factor, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {factor.replace("_", " ").toUpperCase()}
+                            </Badge>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {result.features && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <MapPin className="h-5 w-5" />
+                          Transaction Features
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        {result.features.distance_km && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Distance:</span>
+                            <span>{result.features.distance_km.toFixed(1)} km</span>
+                          </div>
+                        )}
+                        {result.features.city_pop && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Avg City Population:</span>
+                            <span>{result.features.city_pop.toLocaleString()}</span>
+                          </div>
+                        )}
+                        {result.features.age && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Age:</span>
+                            <span>{result.features.age} years</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Transaction Time:</span>
+                          <span>
+                            {result.features.hour}:00
+                            {result.features.is_night ? " (Night)" : " (Day)"}
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
